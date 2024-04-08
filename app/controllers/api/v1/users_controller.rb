@@ -19,19 +19,20 @@ module Api
 
       def create
         user = User.new(user_params)
-        user.password = user.password_digest
-        if user.save
-          # render json: {user: user}, status: :created
-          payload = {
-            user_id: user.id,
-            email: user.email
-          }
-          token = JwtService.encode(payload)
-          render json: {user: user, token: token}, status: :ok
-        else
-          render json: {errors: user.errors}, status: :unprocessable_entity
+        user.password = params[:password_digest]
+        begin
+          ActiveRecord::Base.transaction do
+            if user.save
+              create_response = Auth0Service.create_user(params[:email], params[:password_digest])
+              user.update(auth0_user_id: create_response[:user_id])
+              render json: { user: user, access_token: create_response[:access_token] }, status: :created
+            end
+          end
+        rescue
+          render json: { error: 'User Not Created' }, status: :unprocessable_entity
         end
       end
+      
 
       def user_login
         login_credentials = login_params
@@ -42,18 +43,9 @@ module Api
           render json: {error: 'User Not Found. Please check credentials'}, status: :not_found
           return
         end
+        login_response = Auth0Service.login_user(email, password)
 
-        unless user.authenticate(password)
-          render json: { error: 'Invalid password' }, status: :unauthorized
-          return
-        end
-
-        payload = {
-          user_id: user.id,
-          email: user.email
-        }
-        token = JwtService.encode(payload)
-        render json: {user: user, token: token}, status: :ok
+        render json: {user: user, access_token: login_response["access_token"]}, status: :ok
       end
 
       private

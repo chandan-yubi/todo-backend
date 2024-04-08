@@ -23,6 +23,7 @@ module Api
                 if task.user_id != current_user.id
                     render json: {error: 'You are not Authorized to view this Task'}, status: :unauthorized
                 else
+                    TaskMailer.task_notification(task).deliver_now
                     render json: TasksSerializer.new(task).serialized_json, status: :ok
                 end
             end
@@ -31,22 +32,30 @@ module Api
                 task = Task.new(task_params)
                 task.user_id = current_user.id
 
-                if task.save
-                    status_response = create_status_fun(task.id, "TO-DO")
-                    tags = params[:tags]
-                    if tags
-                        tags.each do |tag|
-                            create_tag_fun(task.id, tag[:tag])
+                begin
+                    ActiveRecord::Base.transaction do
+                        if task.save
+                            status_response = create_status_fun(task.id, "TO-DO")
+                            tags = params[:tags]
+                            if tags
+                                tags.each do |tag|
+                                    create_tag_fun(task.id, tag[:tag])
+                                end
+                            end
+                            if !response
+                                Task.destroy(task.id)
+                                render json: {error: 'Task Not Created'}, status: :unprocessable_entity
+                            end
+                            TaskMailer.task_notification(task).deliver_now
+                            render json: TasksSerializer.new(task).serialized_json, status: :created
+                        else
+                            render json: {errors: task.errors}, status: :unprocessable_entity
                         end
                     end
-                    if !response
-                        Task.destroy(task.id)
-                        render json: {error: 'Task Not Created'}, status: :unprocessable_entity
-                    end
-                    render json: TasksSerializer.new(task).serialized_json, status: :created
-                else
-                    render json: {errors: task.errors}, status: :unprocessable_entity
+                rescue
+                    render json: {error: 'Task Not Created'}, status: :unprocessable_entity
                 end
+                
             end
 
             def update

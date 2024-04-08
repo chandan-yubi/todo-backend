@@ -7,6 +7,13 @@ Rails.application.routes.draw do
       resources :tasks
       post '/login', to: 'users#user_login'
       post '/create_status', to: 'tasks#create_status'
+
+      # get '/auth/auth0/callback' => 'auth0#callback'
+      # get '/auth/failure' => 'auth0#failure'
+      # get '/auth/logout' => 'auth0#logout'
+
+      post 'auth/login', to: 'auth0#login'
+      post 'auth/create_user', to: 'auth0#create_user'
     end
   end
 end
